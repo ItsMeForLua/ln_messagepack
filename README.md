@@ -22,26 +22,27 @@ import Lake
 open Lake DSL
 
 package "my-project" where
-  -- ...
+--  ...
 
 require "ln-messagepack" from git
-  "[https://github.com/itsmeforlua/ln-messagepack](https://github.com/itsmeforlua/ln-messagepack)" @ "main"
+  "https://github.com/itsmeforlua/ln-messagepack" @ "main"
 
 lean_lib «MyProject» where
-  -- ...
-Then, in any file where you need to use the library, simply import LnMessagepack.UsageThe library is designed to be simple and intuitive.1. Basic Encoding & DecodingYou can serialize any type that has a MsgPackEncode instance directly to bytes.import LnMessagepack
+--  ...
+-- Then, in any file where you need to use the library, simply import LnMessagepack.MessagePack.
+-- 1. Basic Encoding & Decoding: You can serialize any type that has a MsgPackEncode instance directly to bytes.import LnMessagepack
 
 -- A simple string
 let originalStr := "hello messagepack"
 
 -- Encode the string to a ByteArray
 let encodedBytes : ByteArray := encodeToMsgPackBytes originalStr
---=> [177, 104, 101, 108, 108, 111, 32, ... ]
+-- => [177, 104, 101, 108, 108, 111, 32, ... ]
 
 -- Decode the bytes back into a String
 let decodedStr? : Option String := decodeFromMsgPackBytes encodedBytes
---=> some "hello messagepack"
-2. Custom Data TypesMaking your own data types serializable is as simple as defining instances for MsgPackEncode and MsgPackDecode.import LnMessagepack
+-- => some "hello messagepack"
+-- 2. Custom Data Types: Making your own data types serializable is as simple as defining instances for MsgPackEncode and MsgPackDecode.import LnMessagepack
 
 -- 1. Define your custom structure
 structure User where
