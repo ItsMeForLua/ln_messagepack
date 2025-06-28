@@ -1,0 +1,12 @@
+/.lake
+
+/build/
+
+/lean-toolchain
+
+.vscode/
+.idea/
+
+.DS_Store
+Thumbs.db
+/ln-messagepack.code-workspace
