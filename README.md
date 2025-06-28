@@ -25,7 +25,7 @@ package "my-project" where
   -- ...
 
 require "ln-messagepack" from git
-  "[https://github.com/your-username/ln-messagepack](https://github.com/your-username/ln-messagepack)" @ "main"
+  "[https://github.com/itsmeforlua/ln-messagepack](https://github.com/itsmeforlua/ln-messagepack)" @ "main"
 
 lean_lib «MyProject» where
   -- ...
