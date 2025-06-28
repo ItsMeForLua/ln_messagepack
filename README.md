@@ -1,6 +1,6 @@
 ## ln-messagepack
 
-An efficient, fast, and pure MessagePack serialization library for Lean 4.
+An efficient, fast, and pure [MessagePack](https://msgpack.org/index.html) serialization library for Lean 4.
 
 `ln-messagepack` provides a simple and type-safe API for encoding and decoding Lean data structures into the MessagePack binary format, making it ideal for data exchange, network protocols, and compact storage.
 
