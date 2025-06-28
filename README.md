@@ -28,10 +28,13 @@ require "ln-messagepack" from git
   "https://github.com/itsmeforlua/ln-messagepack" @ "main"
 
 lean_lib «MyProject» where
---  ...
--- Then, in any file where you need to use the library, simply import LnMessagepack.MessagePack.
--- 1. Basic Encoding & Decoding: You can serialize any type that has a MsgPackEncode instance directly to bytes.import LnMessagepack
+```
 
+
+Then, in any file where you need to use the library, simply import `LnMessagepack.MessagePack`.
+# **1. Basic Encoding & Decoding:**
+You can serialize any type that has a MsgPackEncode instance directly to bytes.
+```lean
 -- A simple string
 let originalStr := "hello messagepack"
 
@@ -42,8 +45,12 @@ let encodedBytes : ByteArray := encodeToMsgPackBytes originalStr
 -- Decode the bytes back into a String
 let decodedStr? : Option String := decodeFromMsgPackBytes encodedBytes
 -- => some "hello messagepack"
--- 2. Custom Data Types: Making your own data types serializable is as simple as defining instances for MsgPackEncode and MsgPackDecode.import LnMessagepack
+```
 
+# **2. Custom Data Types:**
+Making your own data types serializable is as simple as defining instances for MsgPackEncode and MsgPackDecode.
+
+```lean
 -- 1. Define your custom structure
 structure User where
   id : Nat
@@ -63,3 +70,4 @@ instance : MsgPackEncode User where
 instance : MsgPackDecode User where
   decode
     | .arr #[idVal,
+```
