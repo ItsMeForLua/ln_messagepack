@@ -128,7 +128,7 @@ This library is stable and ready for use. The API covers the vast majority of th
 - [x] Binary data (`ByteArray`)
 - [x] Arrays and Lists
 - [x] Extension types (ext family)
-- [ ] Floats (float / double) — Decoding is not yet supported due to a missing primitive in Lean 4.
+- [ ] Floats (float / double) — Not yet implemented, but will be **SOON**.
 
 # Performance Benchmarks
 A simple benchmark was ran in order to test the performance of encoding and decoding an array of 10,000 User objects. The results are a rough guide and may vary based on your machine.
