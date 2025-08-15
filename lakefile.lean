@@ -20,7 +20,7 @@ lean_lib ln_messagepack
 
 -- The main executable (for now) is for demo.
 lean_exe messagepack where
-  root := `Main
+  root := `Messagepack
 
 @[default_target]
 lean_exe tests where
