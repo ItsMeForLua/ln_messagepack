@@ -1,20 +1,38 @@
-import Batteries.Data.ByteArray
-
 /-
-Copyright [2025] [Andrew D. France]
+Copyright (C) <2025>  Andrew D. France
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
 
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
 -/
+
+namespace Float
+
+def inf : Float :=
+  Float.ofBits 0x7ff0000000000000
+
+def negInf : Float :=
+  Float.ofBits 0xfff0000000000000
+
+def nan : Float :=
+  -- This is a quiet NaN pattern, but it may be worth noting that many others exist
+  Float.ofBits 0x7ff8000000000000
+
+end Float
+
+deriving instance BEq for ByteArray
+deriving instance Repr for ByteArray
+
+-- Maximum limits to prevent DoS attacks
+private def MAX_PAYLOAD_SIZE : Nat := 64 * 1024 * 1024  -- 64MB
+private def MAX_RECURSION_DEPTH : Nat := 1000
+private def MAX_COLLECTION_SIZE : Nat := 1024 * 1024    -- 1M elements
 
 namespace LnMessagepack
 
@@ -120,7 +138,9 @@ partial def encodeToBytes (v : MsgPackValue) : ByteArray :=
       if len < 16 then ByteArray.mk #[UInt8.ofNat (0x80 + len)] ++ encodedPairs
       else if len < 65536 then ByteArray.mk #[0xde] ++ encodeUInt16 (UInt16.ofNat len) ++ encodedPairs
       else ByteArray.mk #[0xdf] ++ encodeUInt32 (UInt32.ofNat len) ++ encodedPairs
-  | .float f  => panic! s!"float encoding not implemented: {f}"
+  | .float f  =>
+      let bits := f.toBits  -- Use the built-in method
+      ByteArray.mk #[0xcb] ++ encodeUInt64 bits
   | .ext t d  =>
     let len := d.size
     let typeByte := ByteArray.mk #[t]
@@ -133,18 +153,38 @@ partial def encodeToBytes (v : MsgPackValue) : ByteArray :=
     else if len < 65536 then ByteArray.mk #[0xc8] ++ encodeUInt16 (UInt16.ofNat len) ++ typeByte ++ d
     else ByteArray.mk #[0xc9] ++ encodeUInt32 (UInt32.ofNat len) ++ typeByte ++ d
 
-
 /-! ## DECODING LOGIC -/
 
 open Except
 
-private def getByte (bytes : ByteArray) (i : Nat) : Except String UInt8 :=
-  if i < bytes.size then pure (bytes.get! i)
-  else throw s!"unexpected end of input at offset {i}"
+-- Validation helper to prevent DoS attacks
+private def validateLength (len : Nat) (offset : Nat) (totalSize : Nat) : Except String Unit :=
+  if len > MAX_PAYLOAD_SIZE then
+    throw s!"payload too large: {len} bytes (max {MAX_PAYLOAD_SIZE})"
+  else if len > MAX_COLLECTION_SIZE then
+    throw s!"collection too large: {len} elements (max {MAX_COLLECTION_SIZE})"
+  else if offset + len > totalSize then
+    throw s!"length {len} at offset {offset} exceeds total size {totalSize}"
+  else
+    pure ()
 
+-- Safe byte access with bounds checking
+private def getByte (bytes : ByteArray) (i : Nat) : Except String UInt8 :=
+  if h : i < bytes.size then
+    pure (bytes[i]'h)  -- Needs to have a proof here, always.
+  else
+    throw s!"unexpected end of input at offset {i}"
+
+-- Safe slice extraction with validation
 private def getSlice (bytes : ByteArray) (start len : Nat) : Except String ByteArray :=
-  if start + len ≤ bytes.size then pure (bytes.extract start (start + len))
-  else throw s!"unexpected end of input at offset {start} (len {len})"
+  if len > MAX_PAYLOAD_SIZE then
+    throw s!"slice too large: {len} bytes"
+  else if start >= bytes.size then
+    throw s!"start offset {start} beyond array size {bytes.size}"
+  else if start + len > bytes.size then
+    throw s!"slice [{start}:{start + len}) exceeds array size {bytes.size}"
+  else
+    pure (bytes.extract start (start + len))
 
 private def readUInt16BE (bytes : ByteArray) (offset : Nat) : Except String UInt16 := do
   let hi ← getByte bytes offset
@@ -187,11 +227,13 @@ private def toSInt64 (w : UInt64) : Int :=
   if n < 0x8000000000000000 then n else n - 0x10000000000000000
 
 /-
-The main MessagePack parser:
-(1) Returns the value, and...
-(2) the next offset.
+The main MessagePack parser with recursion depth tracking:
+Returns the value, and the next offset.
 -/
-partial def parse (bytes : ByteArray) (offset : Nat) : Except String (MsgPackValue × Nat) := do
+partial def parse (bytes : ByteArray) (offset : Nat) (depth : Nat := 0) : Except String (MsgPackValue × Nat) := do
+  if depth > MAX_RECURSION_DEPTH then
+    throw s!"maximum recursion depth exceeded: {depth}"
+
   let b ← getByte bytes offset
   let offset' := offset + 1
 
@@ -231,96 +273,127 @@ partial def parse (bytes : ByteArray) (offset : Nat) : Except String (MsgPackVal
     pure (MsgPackValue.int (toSInt64 u), offset' + 8)
   else if b >= 0xa0 && b <= 0xbf then
     let len := (b - 0xa0).toNat
-    let sbytes ← getSlice bytes offset' len
-    pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + len)
+    if len == 0 then
+      pure (MsgPackValue.str "", offset')
+    else
+      validateLength len offset' bytes.size
+      let sbytes ← getSlice bytes offset' len
+      pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + len)
   else if b == 0xd9 then
     let lenByte ← getByte bytes offset'
     let len := lenByte.toNat
-    let sbytes ← getSlice bytes (offset' + 1) len
-    pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + 1 + len)
+    if len == 0 then
+      pure (MsgPackValue.str "", offset' + 1)
+    else
+      validateLength len (offset' + 1) bytes.size
+      let sbytes ← getSlice bytes (offset' + 1) len
+      pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + 1 + len)
   else if b == 0xda then
     let u ← readUInt16BE bytes offset'
     let len := u.toNat
-    let sbytes ← getSlice bytes (offset' + 2) len
-    pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + 2 + len)
+    if len == 0 then
+      pure (MsgPackValue.str "", offset' + 2)
+    else
+      validateLength len (offset' + 2) bytes.size
+      let sbytes ← getSlice bytes (offset' + 2) len
+      pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + 2 + len)
   else if b == 0xdb then
     let u ← readUInt32BE bytes offset'
     let len := u.toNat
-    let sbytes ← getSlice bytes (offset' + 4) len
-    pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + 4 + len)
+    if len == 0 then
+      pure (MsgPackValue.str "", offset' + 4)
+    else
+      validateLength len (offset' + 4) bytes.size
+      let sbytes ← getSlice bytes (offset' + 4) len
+      pure (MsgPackValue.str (String.fromUTF8! sbytes), offset' + 4 + len)
   else if b == 0xc4 then
     let lenByte ← getByte bytes offset'
     let len := lenByte.toNat
+    validateLength len (offset' + 1) bytes.size
     let bin ← getSlice bytes (offset' + 1) len
     pure (MsgPackValue.bin bin, offset' + 1 + len)
   else if b == 0xc5 then
     let u ← readUInt16BE bytes offset'
     let len := u.toNat
+    validateLength len (offset' + 2) bytes.size
     let bin ← getSlice bytes (offset' + 2) len
     pure (MsgPackValue.bin bin, offset' + 2 + len)
   else if b == 0xc6 then
     let u ← readUInt32BE bytes offset'
     let len := u.toNat
+    validateLength len (offset' + 4) bytes.size
     let bin ← getSlice bytes (offset' + 4) len
     pure (MsgPackValue.bin bin, offset' + 4 + len)
   else if b >= 0x90 && b <= 0x9f then
     let len := (b - 0x90).toNat
+    if len > MAX_COLLECTION_SIZE then
+      throw s!"array too large: {len} elements (max {MAX_COLLECTION_SIZE})"
     let mut currentOffset := offset'
     let mut elems := #[]
     for _ in [0:len] do
-      let (v, next) ← parse bytes currentOffset
+      let (v, next) ← parse bytes currentOffset (depth + 1)
       elems := elems.push v
       currentOffset := next
     pure (MsgPackValue.arr elems, currentOffset)
   else if b == 0xdc then
     let u ← readUInt16BE bytes offset'
     let len := u.toNat
+    if len > MAX_COLLECTION_SIZE then
+      throw s!"array too large: {len} elements (max {MAX_COLLECTION_SIZE})"
     let mut currentOffset := offset' + 2
     let mut elems := #[]
     for _ in [0:len] do
-      let (v, next) ← parse bytes currentOffset
+      let (v, next) ← parse bytes currentOffset (depth + 1)
       elems := elems.push v
       currentOffset := next
     pure (MsgPackValue.arr elems, currentOffset)
   else if b == 0xdd then
     let u ← readUInt32BE bytes offset'
     let len := u.toNat
+    if len > MAX_COLLECTION_SIZE then
+      throw s!"array too large: {len} elements (max {MAX_COLLECTION_SIZE})"
     let mut currentOffset := offset' + 4
     let mut elems := #[]
     for _ in [0:len] do
-      let (v, next) ← parse bytes currentOffset
+      let (v, next) ← parse bytes currentOffset (depth + 1)
       elems := elems.push v
       currentOffset := next
     pure (MsgPackValue.arr elems, currentOffset)
   else if b >= 0x80 && b <= 0x8f then
     let len := (b - 0x80).toNat
+    if len > MAX_COLLECTION_SIZE then
+      throw s!"map too large: {len} pairs (max {MAX_COLLECTION_SIZE})"
     let mut currentOffset := offset'
     let mut pairs := #[]
     for _ in [0:len] do
-      let (k, next1) ← parse bytes currentOffset
-      let (v, next2) ← parse bytes next1
+      let (k, next1) ← parse bytes currentOffset (depth + 1)
+      let (v, next2) ← parse bytes next1 (depth + 1)
       pairs := pairs.push (k, v)
       currentOffset := next2
     pure (MsgPackValue.map pairs, currentOffset)
   else if b == 0xde then
     let u ← readUInt16BE bytes offset'
     let len := u.toNat
+    if len > MAX_COLLECTION_SIZE then
+      throw s!"map too large: {len} pairs (max {MAX_COLLECTION_SIZE})"
     let mut currentOffset := offset' + 2
     let mut pairs := #[]
     for _ in [0:len] do
-      let (k, next1) ← parse bytes currentOffset
-      let (v, next2) ← parse bytes next1
+      let (k, next1) ← parse bytes currentOffset (depth + 1)
+      let (v, next2) ← parse bytes next1 (depth + 1)
       pairs := pairs.push (k, v)
       currentOffset := next2
     pure (MsgPackValue.map pairs, currentOffset)
   else if b == 0xdf then
     let u ← readUInt32BE bytes offset'
     let len := u.toNat
+    if len > MAX_COLLECTION_SIZE then
+      throw s!"map too large: {len} pairs (max {MAX_COLLECTION_SIZE})"
     let mut currentOffset := offset' + 4
     let mut pairs := #[]
     for _ in [0:len] do
-      let (k, next1) ← parse bytes currentOffset
-      let (v, next2) ← parse bytes next1
+      let (k, next1) ← parse bytes currentOffset (depth + 1)
+      let (v, next2) ← parse bytes next1 (depth + 1)
       pairs := pairs.push (k, v)
       currentOffset := next2
     pure (MsgPackValue.map pairs, currentOffset)
@@ -346,21 +419,31 @@ partial def parse (bytes : ByteArray) (offset : Nat) : Except String (MsgPackVal
     pure (.ext type data, offset' + 17)
   else if b == 0xc7 then -- ext 8
     let len ← getByte bytes offset'
+    validateLength len.toNat (offset' + 2) bytes.size
     let type ← getByte bytes (offset' + 1)
     let data ← getSlice bytes (offset' + 2) len.toNat
     pure (.ext type data, offset' + 2 + len.toNat)
   else if b == 0xc8 then -- ext 16
     let len ← readUInt16BE bytes offset'
+    validateLength len.toNat (offset' + 3) bytes.size
     let type ← getByte bytes (offset' + 2)
     let data ← getSlice bytes (offset' + 3) len.toNat
     pure (.ext type data, offset' + 3 + len.toNat)
   else if b == 0xc9 then -- ext 32
     let len ← readUInt32BE bytes offset'
+    validateLength len.toNat (offset' + 5) bytes.size
     let type ← getByte bytes (offset' + 4)
     let data ← getSlice bytes (offset' + 5) len.toNat
     pure (.ext type data, offset' + 5 + len.toNat)
-  else if b == 0xca || b == 0xcb then
-    throw "float decoding not implemented"
+  else if b == 0xca then -- float 32
+    let u ← readUInt32BE bytes offset'
+    let f32 := Float32.ofBits u
+    let f := f32.toFloat
+    pure (MsgPackValue.float f, offset' + 4)
+  else if b == 0xcb then -- float 64
+    let u ← readUInt64BE bytes offset'
+    let f := Float.ofBits u
+    pure (MsgPackValue.float f, offset' + 8)
   else
     throw s!"unsupported msgpack format code: {b}"
 

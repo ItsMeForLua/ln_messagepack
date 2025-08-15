@@ -1,19 +1,16 @@
 import LnMessagepack.Core
-
 /-
-Copyright [2025] [Andrew D. France]
+Copyright (C) <2025>  <Andrew D. France>
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
 
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
 -/
 
 namespace LnMessagepack
@@ -85,21 +82,31 @@ instance [MsgPackDecode α] : MsgPackDecode (List α) where
   -- Reusing the Array Instance for simplicity.
   decode v := (decode (α := Array α) v).map Array.toList
 
+instance : MsgPackEncode Float where
+  encode f := .float f
+
+instance : MsgPackDecode Float where
+  decode | .float f => some f | _ => none
+
+instance : MsgPackEncode Float32 where
+  encode f := .float f.toFloat
+
+instance : MsgPackDecode Float32 where
+  decode | .float f => some f.toFloat32 | _ => none
+
 /-! ## Extension Type Example: Timestamp -/
 
 /-- Represents a UTC timestamp, which is compatible with MessagePack's timestamp extension type. -/
 structure Timestamp where
   /-- Seconds since the Unix epoch (1970-01-01 00:00:00 UTC). -/
   sec : Int
-  /-- Nanoseconds for precision. -/
   nsec : UInt32
   deriving BEq, Repr
 
--- This instance teaches Lean how to print a Timestamp.
+-- We need to teach lean how to print a timestamp
 instance : ToString Timestamp where
   toString ts := s!"Timestamp(sec: {ts.sec}, nsec: {ts.nsec})"
 
--- Helper to convert UInt64 to big-endian bytes.
 private def uint64ToBytesBE (u : UInt64) : ByteArray :=
   ByteArray.mk #[
     UInt8.ofNat (u.toNat >>> 56), UInt8.ofNat ((u.toNat >>> 48) &&& 0xFF),
@@ -108,7 +115,6 @@ private def uint64ToBytesBE (u : UInt64) : ByteArray :=
     UInt8.ofNat ((u.toNat >>> 8) &&& 0xFF), UInt8.ofNat (u.toNat &&& 0xFF)
   ]
 
--- Helper to convert bigger endian bytes to UInt64.
 private def bytesToUInt64BE (b : ByteArray) : UInt64 :=
   (b.get! 0).toUInt64 <<< 56 ||| (b.get! 1).toUInt64 <<< 48 |||
   (b.get! 2).toUInt64 <<< 40 ||| (b.get! 3).toUInt64 <<< 32 |||

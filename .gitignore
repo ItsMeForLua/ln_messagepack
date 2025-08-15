@@ -2,8 +2,6 @@
 
 /build/
 
-/lean-toolchain
-
 .vscode/
 .idea/
 

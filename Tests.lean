@@ -1,61 +1,98 @@
 import LnMessagepack.Core
+import LnMessagepack.Typeclasses
 
 /-
-Copyright [2025] [Andrew D. France]
+Copyright (C) <2025>  <Andrew D. France>
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
 
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
 -/
-
 open LnMessagepack
 
-/-!
-  A very simple testing framework.
-  We define a `TestState` to keep track of passes and failures,
-  and helper functions to run test cases.
+/--
+Keeps track of the number of passed/failed tests.
 -/
 structure TestState where
   passed : Nat := 0
   failed : Nat := 0
+deriving Repr
 
 def test_case (name : String) (cond : Bool) : StateT TestState IO Unit := do
   if cond then
-    IO.println s!"  ✅ {name}"
+    IO.println s!"  ✓ {name}"
     modify fun st => { st with passed := st.passed + 1 }
   else
-    IO.println s!"  ❌ {name}"
+    IO.println s!"  × {name}"
     modify fun st => { st with failed := st.failed + 1 }
 
+/-!
+Provide BEq instances for Float and Float32 so we can use `==`
+-/
+instance : BEq Float where
+  beq x y := Float.toBits x == Float.toBits y   -- compares bit patterns
+
+instance : BEq Float32 where
+  beq x y := Float32.toBits x == Float32.toBits y
+
+-- Add Repr instance for ByteArray
+instance : Repr ByteArray where
+  reprPrec ba _ := s!"#[{", ".intercalate (ba.toList.map toString)}]"
+
+-- Helper function to check if two floats are both NaN
+def bothNaN (x y : Float) : Bool :=
+  x.isNaN && y.isNaN
+
+def bothNaN32 (x y : Float32) : Bool :=
+  x.isNaN && y.isNaN
+
+-- Simplified test_round_trip without unsafe operations
 def test_round_trip [BEq α] [Repr α] [MsgPackEncode α] [MsgPackDecode α]
   (name : String) (value : α) : StateT TestState IO Unit := do
   let encoded := encodeToMsgPackBytes value
   let decoded? := decodeFromMsgPackBytes (α := α) encoded
-  let cond := decoded? == some value
   let testName := s!"{name} round-trip"
 
-  if cond then
-    test_case testName cond
+  let same : Bool :=
+    match decoded? with
+    | some d => d == value
+    | none => false
+
+  if same then
+    test_case testName true
   else
-    -- Print extra debug info on failure
-    IO.println s!"  ❌ {testName}"
+    IO.println s!"  × {testName}"
     IO.println s!"    Original: {repr value}"
-    IO.println s!"    Encoded:  {encoded}"
+    IO.println s!"    Encoded:  {repr encoded}"
     IO.println s!"    Decoded:  {repr decoded?}"
     modify fun st => { st with failed := st.failed + 1 }
 
-/-!
-  For testing purposes, we define a sample `User` struct locally.
-  The `Timestamp` struct is imported directly from the library API.
--/
+-- Special test for Float NaN (since NaN != NaN)
+def test_float_nan (name : String) (value : Float) : StateT TestState IO Unit := do
+  let encoded := encodeToMsgPackBytes value
+  let decoded? := decodeFromMsgPackBytes (α := Float) encoded
+  let testName := s!"{name} round-trip"
+
+  let same : Bool :=
+    match decoded? with
+    | some d => bothNaN value d || d == value
+    | none => false
+
+  if same then
+    test_case testName true
+  else
+    IO.println s!"  × {testName}"
+    IO.println s!"    Original: {repr value}"
+    IO.println s!"    Encoded:  {repr encoded}"
+    IO.println s!"    Decoded:  {repr decoded?}"
+    modify fun st => { st with failed := st.failed + 1 }
+
 structure User where
   id : Nat
   name : String
@@ -73,16 +110,14 @@ instance : MsgPackEncode User where
 instance : MsgPackDecode User where
   decode
     | .arr #[idVal, nameVal] => do
-      let id ← decode idVal
+      let id   ← decode idVal
       let name ← decode nameVal
       pure { id, name }
     | _ => none
 
--- The main function for our test executable.
 def main : IO UInt32 := do
   IO.println "--- Running Test Suite for LnMessagepack ---"
 
-  -- Define the entire sequence of tests as a single monadic action.
   let testSuite : StateT TestState IO Unit := do
     -- SECTION: Primitive Types
     IO.println "\n[1] Primitives"
@@ -93,6 +128,13 @@ def main : IO UInt32 := do
     test_round_trip "Zero Int" (0 : Int)
     test_round_trip "Positive Nat" (54321 : Nat)
     test_round_trip "String" "hello, world!"
+    test_round_trip "Float" (3.14159 : Float)
+    test_round_trip "Float32" (2.71828 : Float32)
+    test_round_trip "Zero Float" (0.0 : Float)
+    test_round_trip "Negative Float" (-123.456 : Float)
+    test_round_trip "Float Infinity" Float.inf
+    test_float_nan "Float NaN" Float.nan  -- Use special NaN test
+    test_round_trip "Float -Infinity" Float.negInf
 
     -- SECTION: Collections
     IO.println "\n[2] Collections"
@@ -104,7 +146,6 @@ def main : IO UInt32 := do
     IO.println "\n[3] Custom Types"
     let user : User := { id := 123, name := "Alice" }
     test_round_trip "User Struct" user
-    -- This uses the *real* Timestamp type from the library API.
     let ts : Timestamp := { sec := 1672531200, nsec := 500000000 }
     test_round_trip "Timestamp Ext" ts
 
@@ -118,14 +159,12 @@ def main : IO UInt32 := do
     let decodedBad? : Option String := decodeFromMsgPackBytes badBytes
     test_case "Decoding invalid bytes returns none" (decodedBad? == none)
 
-  -- Now, run the test suite action with an initial empty state.
   let (_, finalState) ← StateT.run testSuite { passed := 0, failed := 0 }
 
-  -- Print final results
   IO.println "\n--- Test Summary ---"
   IO.println s!"{finalState.passed} passed, {finalState.failed} failed."
 
   if finalState.failed > 0 then
-    return 1 -- Return a non-zero exit code to indicate failure
+    return 1
   else
     return 0

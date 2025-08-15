@@ -1,19 +1,18 @@
 ## ln-messagepack
 
-An efficient, fast, and pure [MessagePack](https://msgpack.org/index.html) serialization library for Lean 4.
+A [MessagePack](https://msgpack.org/index.html) serialization library for Lean 4.
 
-`ln-messagepack` provides a simple and type-safe API for encoding and decoding Lean data structures into the MessagePack binary format, making it ideal for data exchange, network protocols, and compact storage.
+`ln-messagepack` provides a simple API for encoding and decoding Lean data structures into the MessagePack binary format, making it ideal for data exchange, network protocols, and compact storage.
 
 ## Features
 
-- ✅ **Type-safe API:** Uses typeclasses (`MsgPackEncode`/`MsgPackDecode`) for safe serialization.
-- ✅ **Primitives:** Full support for nil, bool, int, uint, and string types.
-- ✅ **Collections:** Out-of-the-box support for `Array` and `List`.
-- ✅ **Extension Types:** Support for the ext format family, with Timestamp provided as a built-in example.
-- ✅ **Custom Structs:** Easily extend to your own data types by implementing the `MsgPackEncode`/`MsgPackDecode` instances.
-- ✅ **Zero Dependencies:** Relies only on the standard batteries library.
-- ✅ **Pure Lean:** No FFI or external dependencies.
-- ✅ **Tested & Benchmarked:** Includes a test suite and performance benchmarks.
+-  **Type-safe API:** Uses typeclasses (`MsgPackEncode`/`MsgPackDecode`) for safe serialization.
+-  **Primitives:** Full support for nil, bool, int, uint, and string types.
+-  **Collections:** Out-of-the-box support for `Array` and `List`.
+-  **Extension Types:** Support for the ext format family, with Timestamp provided as a built-in example.
+-  **Custom Structs:** Easily extend to your own data types by implementing the `MsgPackEncode`/`MsgPackDecode` instances.
+-  **Zero Dependencies:** ln-messagepack requires no third party libraries.
+- **Tested & Benchmarked:** Includes a test suite and performance benchmarks.
 
 # Why Not JSON?
 
@@ -122,13 +121,13 @@ def main : IO Unit := do
 
 ## Current Status
 
-This library is stable and ready for use. The API covers the vast majority of the MessagePack specification.
+The API covers the vast majority of the MessagePack specification.
 
 - [x] Nil, Boolean, Integer, String
 - [x] Binary data (`ByteArray`)
 - [x] Arrays and Lists
 - [x] Extension types (ext family)
-- [ ] Floats (float / double) — Not yet implemented, but will be **SOON**.
+- [x] Floats (float / double)
 
 # Performance Benchmarks
 A simple benchmark was ran in order to test the performance of encoding and decoding an array of 10,000 User objects. The results are a rough guide and may vary based on your machine.
@@ -144,7 +143,7 @@ A simple benchmark was ran in order to test the performance of encoding and deco
 
 [3] Benchmarking Decoding
   Decode 10k users: 2 ms
-    ✅ Verification successful.
+     Verification successful.
 
 --- Benchmarks Complete ---
 ```
@@ -156,6 +155,6 @@ Contributions are welcome! Please feel free to open an issue to discuss a bug or
 
 ## License
 
-This library is available under the Apache 2.0 License.
+This library is available under the LGPL v2.1 [License](LICENSE).
 
 ---

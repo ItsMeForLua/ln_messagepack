@@ -1,10 +1,10 @@
 # TODO List for LnMessagepack
-
+*Note: Currently ln-messagepack is pre-release until we finish `Priority 3`.*
 ## Priority 1 (Critical/Blocking)
-1. **Implement float encoding/decoding**   Currently panics with "float encoding not implemented"
-2. **Remove unsafe operations**   Replace `get!` and `String.fromUTF8!` with safe alternatives that return `Option`/`Except`
-3. **Add comprehensive error handling**   Replace generic error strings with structured error types
-4. **Fix potential buffer overflows**   Add bounds checking for all byte array operations
+1. ✓ ~~**Implement float encoding/decoding**   Currently panics with "float encoding not implemented"~~ | **Done**
+2. ✓ ~~**Remove unsafe operations**   Replace `get!` and `String.fromUTF8!` with safe alternatives that return `Option`/`Except`~~ | **Done**
+3. **Add better error handling**   Replace generic error strings with structured error types
+4. ✓ ~~**Fix potential buffer overflows**   Add bounds checking for all byte array operations~~ | **Done**
 
 ## Priority 2 (Important for Production)
 5. **Implement streaming parser**   Avoid loading entire payload into memory for large data
