@@ -1,8 +1,8 @@
-## ln-messagepack
+## ln_messagepack
 
 A [MessagePack](https://msgpack.org/index.html) serialization library for Lean 4.
 
-`ln-messagepack` provides a simple API for encoding and decoding Lean data structures into the MessagePack binary format, making it ideal for data exchange, network protocols, and compact storage.
+`ln_messagepack` provides a simple API for encoding and decoding Lean data structures into the MessagePack binary format, making it ideal for data exchange, network protocols, and compact storage.
 
 ## Features
 
@@ -20,7 +20,7 @@ Both MessagePack and JSON are data serialization formats. MessagePack uses binar
 
 ## Setup
 
-Add `ln-messagepack` to your project's `lakefile.lean` dependencies:
+Add `ln_messagepack` to your project's `lakefile.lean` dependencies:
 
 ```lean
 import Lake
@@ -29,8 +29,8 @@ open Lake DSL
 package "my-project" where
   -- ...
 
-require «ln-messagepack» from git
-  "https://github.com/itsmeforlua/ln-messagepack" @ "main"
+require «ln_messagepack» from git
+  "https://github.com/itsmeforlua/ln_messagepack" @ "main"
 
 lean_lib «MyProject» where
   -- ...
@@ -39,7 +39,7 @@ lean_lib «MyProject» where
 Then, in any file where you need to use the library, simply import the MessagePack module:
 
 ```lean
-import LnMessagepack.MessagePack
+import ln_messagepack.MessagePack
 ```
 
 ## API at a Glance
@@ -58,7 +58,7 @@ The core of the library revolves around two typeclasses and two functions:
 You can serialize any type that has a `MsgPackEncode` instance directly to bytes.
 
 ```lean
-import LnMessagepack.MessagePack
+import ln_messagepack.MessagePack
 
 -- A simple string
 let originalStr := "hello messagepack"
@@ -77,7 +77,7 @@ let decoded? : Option String := decodeFromMsgPackBytes encodedBytes
 Making your own data types serializable is as simple as defining instances for `MsgPackEncode` and `MsgPackDecode`.
 
 ```lean
-import LnMessagepack.MessagePack
+import ln_messagepack.MessagePack
 
 -- 1. Define your custom structure
 structure User where
@@ -107,7 +107,7 @@ instance : MsgPackDecode User where
 The library includes built-in support for the standard Timestamp extension type.
 
 ```lean
-import LnMessagepack.MessagePack
+import ln_messagepack.MessagePack
 
 def main : IO Unit := do
   let ts : Timestamp := { sec := 1672531200, nsec := 500000000 }
@@ -133,7 +133,7 @@ The API covers the vast majority of the MessagePack specification.
 A simple benchmark was ran in order to test the performance of encoding and decoding an array of 10,000 User objects. The results are a rough guide and may vary based on your machine.
 
 ```console
---- Running Benchmarks for LnMessagepack ---
+--- Running Benchmarks for ln_messagepack ---
 
 [1] Preparing data (10000 users)...
 
