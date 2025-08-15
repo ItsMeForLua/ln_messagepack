@@ -14,9 +14,9 @@ Copyright (C) <2025>  <Andrew D. France>
 -/
 open Lake DSL
 
-package "ln-messagepack" where
+package "ln_messagepack" where
 
-lean_lib LnMessagepack
+lean_lib ln_messagepack
 
 -- The main executable (for now) is for demo.
 lean_exe messagepack where

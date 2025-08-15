@@ -1,4 +1,4 @@
-import LnMessagepack.MessagePack
+import ln_messagepack.MessagePack
 
 /-
 Copyright (C) <2025>  <Andrew D. France>
@@ -31,7 +31,7 @@ To run the demo executable, you must CD into the library root, and then run `lak
 
 -- By convention, users should only need to import the library's main module, like so:
 
-open LnMessagepack
+open ln_messagepack
 
 /-- A basic structure to demonstrate custom type serialization. -/
 structure User where

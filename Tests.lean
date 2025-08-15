@@ -1,5 +1,5 @@
-import LnMessagepack.Core
-import LnMessagepack.Typeclasses
+import ln_messagepack.Core
+import ln_messagepack.Typeclasses
 
 /-
 Copyright (C) <2025>  <Andrew D. France>
@@ -14,7 +14,7 @@ Copyright (C) <2025>  <Andrew D. France>
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
     Lesser General Public License for more details.
 -/
-open LnMessagepack
+open ln_messagepack
 
 /--
 Keeps track of the number of passed/failed tests.

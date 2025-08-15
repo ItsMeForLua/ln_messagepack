@@ -1,5 +1,5 @@
-import LnMessagepack.Core
-
+import ln_messagepack.Core
+import ln_messagepack.Typeclasses
 /-
 Copyright (C) <2025>  <Andrew D. France>
 
@@ -14,7 +14,7 @@ Copyright (C) <2025>  <Andrew D. France>
     Lesser General Public License for more details.
 -/
 
-open LnMessagepack
+open ln_messagepack
 
 /-!
   This file contains performance benchmarks for the Ln-Messagepack library.
