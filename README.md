@@ -11,7 +11,7 @@ A [MessagePack](https://msgpack.org/index.html) serialization library for Lean 4
 -  **Collections:** Out-of-the-box support for `Array` and `List`.
 -  **Extension Types:** Support for the ext format family, with Timestamp provided as a built-in example.
 -  **Custom Structs:** Easily extend to your own data types by implementing the `MsgPackEncode`/`MsgPackDecode` instances.
--  **Zero Dependencies:** ln-messagepack requires no third party libraries.
+-  **Zero Dependencies:** ln_messagepack requires no third party libraries.
 - **Tested & Benchmarked:** Includes a test suite and performance benchmarks.
 
 # Why Not JSON?
@@ -39,17 +39,22 @@ lean_lib «MyProject» where
 Then, in any file where you need to use the library, simply import the MessagePack module:
 
 ```lean
-import ln_messagepack.MessagePack
+import ln_messagepack.Messagepack
+
+open ln_messagepack
 ```
+**Note:** The `open ln_messagepack` line is important because it brings the library functions (encode, decode, encodeToBytes, decodeFromBytes) into scope so you can use them directly without prefixing them with the module name.
 
 ## API at a Glance
 
-The core of the library revolves around two typeclasses and two functions:
+The core of the library revolves around two typeclasses and several functions:
 
 - `class MsgPackEncode (α : Type)`: A typeclass for types that can be encoded.
 - `class MsgPackDecode (α : Type)`: A typeclass for types that can be decoded.
-- `encodeToMsgPackBytes (a : α) : ByteArray`: Encodes an `α` directly to bytes.
-- `decodeFromMsgPackBytes (bs : ByteArray) : Option α`: Decodes bytes into an `Option α`.
+- `encode (a : α) : MsgPackValue`: Encodes a value to MsgPackValue.
+- `decode (v : MsgPackValue) : Option α`: Decodes a MsgPackValue to Option α.
+- `encodeToBytes (v : MsgPackValue) : ByteArray`: Encodes MsgPackValue to bytes.
+- `decodeFromBytes (bs : ByteArray) : Except String MsgPackValue`: Decodes bytes to MsgPackValue.
 
 ## Usage
 
@@ -58,18 +63,24 @@ The core of the library revolves around two typeclasses and two functions:
 You can serialize any type that has a `MsgPackEncode` instance directly to bytes.
 
 ```lean
-import ln_messagepack.MessagePack
+import ln_messagepack.Messagepack
 
--- A simple string
-let originalStr := "hello messagepack"
-
--- Encode the string to a ByteArray
-let encodedBytes := encodeToMsgPackBytes originalStr
---=> #[177, 104, 101, 108, 108, 111, 32, 109, 101, 115, 115, 97, 103, 101, 112, 97, 99, 107]
-
--- Decode the bytes back into a String
-let decoded? : Option String := decodeFromMsgPackBytes encodedBytes
---=> some "hello messagepack"
+#eval do
+  -- A simple string
+  let originalStr := "hello messagepack"
+  
+  -- Encode the string to MsgPackValue then to bytes
+  let msgPackValue := encode originalStr
+  let encodedBytes := ln_messagepack.encodeToBytes msgPackValue
+  IO.println s!"Encoded: {encodedBytes}"
+  
+  -- Decode the bytes back into a String
+  match ln_messagepack.decodeFromBytes encodedBytes with
+  | .ok value => 
+    match decode value with
+    | some str => IO.println s!"Decoded: {str}"
+    | none => IO.println "Failed to decode to String"
+  | .error msg => IO.println s!"Decoding error: {msg}"
 ```
 
 ### 2. Custom Data Types
@@ -77,7 +88,7 @@ let decoded? : Option String := decodeFromMsgPackBytes encodedBytes
 Making your own data types serializable is as simple as defining instances for `MsgPackEncode` and `MsgPackDecode`.
 
 ```lean
-import ln_messagepack.MessagePack
+import ln_messagepack.Messagepack
 
 -- 1. Define your custom structure
 structure User where
@@ -100,6 +111,20 @@ instance : MsgPackDecode User where
       let name ← decode nameVal
       pure { id, name }
     | _ => none
+
+-- Example usage
+#eval do
+  let user : User := { id := 123, name := "Alice" }
+  let msgPackValue := encode user
+  let bytes := ln_messagepack.encodeToBytes msgPackValue
+  IO.println s!"Encoded: {bytes}"
+
+  match ln_messagepack.decodeFromBytes bytes with
+  | .ok value =>
+    match decode value with
+    | some (decodedUser : User) => IO.println s!"User: {decodedUser.name} (ID: {decodedUser.id})"
+    | none => IO.println "Failed to decode to User"
+  | .error msg => IO.println s!"Decoding error: {msg}"
 ```
 
 ### 3. Extension Types: Timestamp
@@ -107,17 +132,73 @@ instance : MsgPackDecode User where
 The library includes built-in support for the standard Timestamp extension type.
 
 ```lean
-import ln_messagepack.MessagePack
+import ln_messagepack.Messagepack
 
 def main : IO Unit := do
   let ts : Timestamp := { sec := 1672531200, nsec := 500000000 }
-  let bytes := encodeToMsgPackBytes ts
+  let msgPackValue := encode ts
+  let bytes := ln_messagepack.encodeToBytes msgPackValue
   IO.println s!"Encoded timestamp: {bytes}"
 
-  match decodeFromMsgPackBytes (α := Timestamp) bytes with
-  | some decodedTs => IO.println s!"Decoded timestamp (sec): {decodedTs.sec}"
-  | none => IO.println "Decoding failed!"
+  match ln_messagepack.decodeFromBytes bytes with
+  | .ok value =>
+    match decode value with
+    | some (decodedTs : Timestamp) => IO.println s!"Decoded timestamp (sec): {decodedTs.sec}"
+    | none => IO.println "Failed to decode to Timestamp"
+  | .error msg => IO.println s!"Decoding error: {msg}"
 ```
+
+## 4. Working with Arrays and Lists
+
+```lean
+import ln_messagepack.Messagepack
+
+#eval do
+  -- Arrays
+  let numbers : Array Int := #[1, 2, 3, 4, 5]
+  let msgPackValue := encode numbers
+  let encodedArray := ln_messagepack.encodeToBytes msgPackValue
+  
+  match ln_messagepack.decodeFromBytes encodedArray with
+  | .ok value =>
+    match decode value with
+    | some (decodedArray : Array Int) => IO.println s!"Array roundtrip successful: {decodedArray}"
+    | none => IO.println "Failed to decode Array"
+  | .error msg => IO.println s!"Array decoding error: {msg}"
+
+  -- Lists
+  let strings : List String := ["hello", "world", "from", "lean"]
+  let listMsgPack := encode strings
+  let encodedList := ln_messagepack.encodeToBytes listMsgPack
+  
+  match ln_messagepack.decodeFromBytes encodedList with
+  | .ok value =>
+    match decode value with
+    | some (decodedList : List String) => IO.println s!"List roundtrip successful: {decodedList}"
+    | none => IO.println "Failed to decode List"
+  | .error msg => IO.println s!"List decoding error: {msg}"
+```
+
+Getting Started Tips
+
+### For Building Executables
+
+- Use `def main : IO Unit := do` as your entry point
+- Run with `lake exec <your-executable-name>`
+- The `main` function is required for the linker to create a working executable
+
+### For Testing/Experimentation
+
+- Use `#eval do` for quick testing
+- Run with `lake build` to see the output during compilation
+- Great for trying out the library without creating executables
+
+### Common Gotchas
+
+1. **Always include `open ln_messagepack`** after your import to access functions directly
+2. **Use `def main` for executables**, `#eval` for testing only
+3. **Handle the `Except String MsgPackValue`** return type from `decodeFromBytes`
+4. **Provide explicit type annotations** when decoding (e.g., `some (str : String)`)
 
 ## Current Status
 
