@@ -65,6 +65,20 @@ instance : MsgPackDecode Int where
     | .uint n => some (n : Int)
     | _ => none
 
+/-! ## Tuple Instances -/
+
+instance [MsgPackEncode α] [MsgPackEncode β] : MsgPackEncode (α × β) where
+  encode := fun
+  | (a, b) => .arr #[encode a, encode b]
+
+instance [MsgPackDecode α] [MsgPackDecode β] : MsgPackDecode (α × β) where
+  decode
+    | .arr #[aVal, bVal] => do
+      let a ← decode aVal
+      let b ← decode bVal
+      pure (a, b)
+    | _ => none
+
 /-! ## Generic Collection Instances -/
 
 instance [MsgPackEncode α] : MsgPackEncode (Array α) where
