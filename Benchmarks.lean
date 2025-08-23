@@ -55,27 +55,27 @@ def main : IO Unit := do
   IO.println "--- Running Benchmarks for LnMessagepack ---"
 
   -- (1) Create a large, realistic data set.
-  let userCount := 10000
+  let userCount := 1000000
   IO.println s!"\n[1] Preparing data ({userCount} users)..."
   let users := (List.range userCount).map (fun i => ({ id := i, name := s!"User #{i}" } : User))
   let usersArray := users.toArray
 
   -- (2) Benchmark the encoding process.
   IO.println "\n[2] Benchmarking Encoding"
-  let encodedBytes ← time_it "Encode 10k users" (IO.lazyPure (fun _ => encodeToMsgPackBytes usersArray))
+  let encodedBytes ← time_it s!"Encode {userCount} users" (IO.lazyPure (fun _ => encodeToMsgPackBytes usersArray))
   IO.println s!"    Total encoded size: {encodedBytes.size} bytes"
 
   -- (3) Benchmark the decoding process.
   IO.println "\n[3] Benchmarking Decoding"
-  let decodedUsers? ← time_it "Decode 10k users" (IO.lazyPure (fun _ => decodeFromMsgPackBytes (α := Array User) encodedBytes))
+  let decodedUsers? ← time_it s!"Decode {userCount} users" (IO.lazyPure (fun _ => decodeFromMsgPackBytes (α := Array User) encodedBytes))
 
   -- (4) Verify the result to make sure the benchmark was valid.
   if let some decodedUsers := decodedUsers? then
     if decodedUsers.size == userCount then
-      IO.println "    ✅ Verification successful."
+      IO.println "    ✓ Verification successful."
     else
-      IO.println "    ❌ Verification failed: Decoded array has wrong size."
+      IO.println "    × Verification failed: Decoded array has wrong size."
   else
-    IO.println "    ❌ Verification failed: Decoding returned none."
+    IO.println "    × Verification failed: Decoding returned none."
 
   IO.println "\n--- Benchmarks Complete ---"
