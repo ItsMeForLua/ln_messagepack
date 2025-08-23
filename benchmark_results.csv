@@ -1,0 +1,6 @@
+test_name,data_size,msgpack_encode_ms,msgpack_decode_ms,msgpack_size_bytes,json_encode_ms,json_decode_ms,json_size_bytes
+Small,1000,1,0,23509,2,2,56981
+Medium,10000,5,5,248509,14,16,589781
+Large,100000,61,48,2657439,124,137,6097781
+VeryLarge,1000000,615,518,28757439,1435,1550,62977781
+Complex,10000,7,6,264726,18,18,656109
