@@ -15,7 +15,7 @@ tst: tests
 
 bench:
 	@echo "Starting benchmarks for ln_messagepack"
-	@$(LEAN) exec bench >> logbench.txt
+	@$(LEAN) exec bench
 
 bnc: bench
 
