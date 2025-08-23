@@ -87,8 +87,8 @@ instance : Lean.ToJson User where
     ("name", Json.str u.name),
     ("active", Json.bool u.active),
     ("score", match JsonNumber.fromFloat? u.score with
-              | .inl _ => Json.str "NaN or Infinity"
-              | .inr jn => Json.num jn)
+              | .inl _ => Json.str "NaN or Infinity" -- error case
+              | .inr jn => Json.num jn) -- success case
   ]
 instance : Lean.FromJson User where
   fromJson? j := do
@@ -119,14 +119,27 @@ instance : Lean.FromJson ComplexData where
     let flags ← j.getObjValAs? (Array Bool) "flags"
     pure { users, metadata, timestamps, flags }
 
--- Helper function to time an action
-def timeAction (name : String) (action : IO α) : IO α := do
+-- Helper function to time an action and return timing
+def timeAction (name : String) (action : IO α) : IO (α × UInt64) := do
   let start ← IO.monoMsNow
   let result ← action
   let stop ← IO.monoMsNow
   let elapsed := stop - start
   IO.println s!"  {name}: {elapsed} ms"
-  return result
+  return (result, elapsed)
+
+-- CSV logging helper
+def logBenchmarkResult (csvFile : String) (testName : String) (dataSize : Nat)
+                      (msgpackEncodeTime : UInt64) (msgpackDecodeTime : UInt64) (msgpackSize : Nat)
+                      (jsonEncodeTime : UInt64) (jsonDecodeTime : UInt64) (jsonSize : Nat) : IO Unit := do
+  let csvLine := s!"{testName},{dataSize},{msgpackEncodeTime},{msgpackDecodeTime},{msgpackSize},{jsonEncodeTime},{jsonDecodeTime},{jsonSize}\n"
+  IO.FS.withFile csvFile IO.FS.Mode.append fun handle =>
+    handle.putStr csvLine
+
+-- Initialize CSV file with headers
+def initializeCsvFile (csvFile : String) : IO Unit := do
+  let headers := "test_name,data_size,msgpack_encode_ms,msgpack_decode_ms,msgpack_size_bytes,json_encode_ms,json_decode_ms,json_size_bytes\n"
+  IO.FS.writeFile csvFile headers
 
 -- Generate test data
 def generateUsers (count : Nat) : Array User :=
@@ -144,6 +157,7 @@ def generateComplexData (userCount : Nat) : ComplexData := {
   flags := (List.range userCount).toArray.map fun i => i % 3 != 0
 }
 
+-- Edge case generators
 def generateLargeStrings : Array String :=
   #["", "x", "hello world", String.mk (List.replicate 1000 'a'), String.mk (List.replicate 10000 'b')]
 
@@ -153,18 +167,18 @@ def generateExtremeNumbers : Array Int :=
 def generateFloatEdgeCases : Array Float :=
   #[0.0, 1.0, -1.0, 3.14159, -3.14159, 1.23456789, -1.23456789]
 
-
-def benchmarkSerialization (name : String) (count : Nat) : IO Unit := do
+-- Benchmark functions
+def benchmarkSerialization (csvFile : String) (name : String) (count : Nat) : IO Unit := do
   IO.println s!"\n=== {name} Benchmark ({count} items) ==="
 
   let users := generateUsers count
 
   -- MessagePack benchmarks
   IO.println "\n[MessagePack]"
-  let msgpackEncoded ← timeAction "Encode" (IO.lazyPure fun _ => encodeToMsgPackBytes users)
+  let (msgpackEncoded, msgpackEncodeTime) ← timeAction "Encode" (IO.lazyPure fun _ => encodeToMsgPackBytes users)
   IO.println s!"  Size: {msgpackEncoded.size} bytes"
 
-  let msgpackDecoded? ← timeAction "Decode" (IO.lazyPure fun _ => decodeFromMsgPackBytes (α := Array User) msgpackEncoded)
+  let (msgpackDecoded?, msgpackDecodeTime) ← timeAction "Decode" (IO.lazyPure fun _ => decodeFromMsgPackBytes (α := Array User) msgpackEncoded)
   match msgpackDecoded? with
   | some decoded =>
     if decoded.size == count then
@@ -175,10 +189,10 @@ def benchmarkSerialization (name : String) (count : Nat) : IO Unit := do
 
   -- JSON benchmarks
   IO.println "\n[JSON]"
-  let jsonEncoded ← timeAction "Encode" (IO.lazyPure fun _ => (Lean.ToJson.toJson users).compress.toUTF8)
+  let (jsonEncoded, jsonEncodeTime) ← timeAction "Encode" (IO.lazyPure fun _ => (Lean.ToJson.toJson users).compress.toUTF8)
   IO.println s!"  Size: {jsonEncoded.size} bytes"
 
-  let jsonDecoded? ← timeAction "Decode" (IO.lazyPure fun _ =>
+  let (jsonDecoded?, jsonDecodeTime) ← timeAction "Decode" (IO.lazyPure fun _ =>
     match String.fromUTF8? jsonEncoded with
     | some jsonStr =>
       match Json.parse jsonStr with
@@ -197,6 +211,9 @@ def benchmarkSerialization (name : String) (count : Nat) : IO Unit := do
   -- Size comparison
   let ratio := (msgpackEncoded.size.toFloat / jsonEncoded.size.toFloat * 100).round.toUInt32
   IO.println s!"\nSize Comparison: MessagePack is {ratio}% the size of JSON"
+
+  -- Log to CSV
+  logBenchmarkResult csvFile name count msgpackEncodeTime msgpackDecodeTime msgpackEncoded.size jsonEncodeTime jsonDecodeTime jsonEncoded.size
 
 def benchmarkEdgeCases : IO Unit := do
   IO.println "\n=== Edge Cases Benchmark ==="
@@ -230,17 +247,17 @@ def benchmarkEdgeCases : IO Unit := do
     let fname := toString f
     IO.println s!"Float {fname} - MessagePack: {msgpackSize} bytes, JSON: {jsonSize} bytes"
 
-def benchmarkComplexData (userCount : Nat) : IO Unit := do
+def benchmarkComplexData (csvFile : String) (userCount : Nat) : IO Unit := do
   IO.println s!"\n=== Complex Data Benchmark ({userCount} users) ==="
 
   let complexData := generateComplexData userCount
 
   -- MessagePack
   IO.println "\n[MessagePack Complex]"
-  let msgpackEncoded ← timeAction "Encode Complex" (IO.lazyPure fun _ => encodeToMsgPackBytes complexData)
+  let (msgpackEncoded, msgpackEncodeTime) ← timeAction "Encode Complex" (IO.lazyPure fun _ => encodeToMsgPackBytes complexData)
   IO.println s!"  Size: {msgpackEncoded.size} bytes"
 
-  let msgpackDecoded? ← timeAction "Decode Complex" (IO.lazyPure fun _ => decodeFromMsgPackBytes (α := ComplexData) msgpackEncoded)
+  let (msgpackDecoded?, msgpackDecodeTime) ← timeAction "Decode Complex" (IO.lazyPure fun _ => decodeFromMsgPackBytes (α := ComplexData) msgpackEncoded)
   match msgpackDecoded? with
   | some decoded =>
     if decoded.users.size == userCount then
@@ -251,10 +268,10 @@ def benchmarkComplexData (userCount : Nat) : IO Unit := do
 
   -- JSON
   IO.println "\n[JSON Complex]"
-  let jsonEncoded ← timeAction "Encode Complex" (IO.lazyPure fun _ => (Lean.ToJson.toJson complexData).compress.toUTF8)
+  let (jsonEncoded, jsonEncodeTime) ← timeAction "Encode Complex" (IO.lazyPure fun _ => (Lean.ToJson.toJson complexData).compress.toUTF8)
   IO.println s!"  Size: {jsonEncoded.size} bytes"
 
-  let jsonDecoded? ← timeAction "Decode Complex" (IO.lazyPure fun _ =>
+  let (jsonDecoded?, jsonDecodeTime) ← timeAction "Decode Complex" (IO.lazyPure fun _ =>
     match String.fromUTF8? jsonEncoded with
     | some jsonStr =>
       match Json.parse jsonStr with
@@ -274,6 +291,9 @@ def benchmarkComplexData (userCount : Nat) : IO Unit := do
   let ratio := (msgpackEncoded.size.toFloat / jsonEncoded.size.toFloat * 100).round.toUInt32
   IO.println s!"\nComplex Data Size Comparison: MessagePack is {ratio}% the size of JSON"
 
+  -- Log to CSV
+  logBenchmarkResult csvFile "Complex" userCount msgpackEncodeTime msgpackDecodeTime msgpackEncoded.size jsonEncodeTime jsonDecodeTime jsonEncoded.size
+
 def benchmarkMemoryLimits : IO Unit := do
   IO.println "\n=== Memory Limits Test ==="
 
@@ -285,8 +305,8 @@ def benchmarkMemoryLimits : IO Unit := do
     let largeArray := (List.range size).toArray
 
     try
-      let encoded ← timeAction s!"Encode {size} ints" (IO.lazyPure fun _ => encodeToMsgPackBytes largeArray)
-      let decoded? ← timeAction s!"Decode {size} ints" (IO.lazyPure fun _ => decodeFromMsgPackBytes (α := Array Nat) encoded)
+      let (encoded, encodeTime) ← timeAction s!"Encode {size} ints" (IO.lazyPure fun _ => encodeToMsgPackBytes largeArray)
+      let (decoded?, decodeTime) ← timeAction s!"Decode {size} ints" (IO.lazyPure fun _ => decodeFromMsgPackBytes (α := Array Nat) encoded)
       match decoded? with
       | some decoded =>
         if decoded.size == size then
@@ -298,20 +318,25 @@ def benchmarkMemoryLimits : IO Unit := do
       IO.println s!"  × Exception with {size} elements: {e}"
 
 def main : IO Unit := do
-  IO.println "🚀 Comprehensive MessagePack vs JSON Benchmark Suite"
+  let csvFile := "benchmark_results.csv"
+
+  IO.println "MessagePack vs JSON Benchmark Suite"
   IO.println "======================================================="
 
+  initializeCsvFile csvFile
+
   -- Basic performance tests
-  benchmarkSerialization "Small Dataset" 1000
-  benchmarkSerialization "Medium Dataset" 10000
-  benchmarkSerialization "Large Dataset" 100000
-  benchmarkSerialization "Very Large Dataset" 1000000
+  benchmarkSerialization csvFile "Small" 1000
+  benchmarkSerialization csvFile "Medium" 10000
+  benchmarkSerialization csvFile "Large" 100000
+  benchmarkSerialization csvFile "VeryLarge" 1000000
 
   benchmarkEdgeCases
 
-  benchmarkComplexData 10000
+  benchmarkComplexData csvFile 10000
 
   benchmarkMemoryLimits
 
-  IO.println "\n🎯 Benchmark Suite Complete!"
+  IO.println "\nBenchmark Suite Complete!"
+  IO.println s!"Results logged to: {csvFile}"
   IO.println "============================================"

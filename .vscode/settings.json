@@ -1,0 +1,26 @@
+{
+  "cSpell.dictionaryDefinitions": [
+    {
+      "name": "custom",
+      "path": "./.vscode/dictionary.txt"
+    }
+  ],
+  "cSpell.customDictionaries": {
+    "custom": {
+      "name": "custom",
+      "path": "./.vscode/dictionary.txt",
+      "addWords": true
+    }
+  },
+  "cSpell.words": [
+    "Jaro",
+    "println",
+    "leanprover",
+    "foldl",
+    "messagepack",
+    "ln_messagepack",
+    "Typeclasses",
+    "Repr",
+    "msgpack"
+  ]
+}
